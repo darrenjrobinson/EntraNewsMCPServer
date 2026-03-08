@@ -578,6 +578,16 @@ async function main(): Promise<void> {
 
     log(`  → ${rawChunks.length} chunks`);
 
+    // Skip embedding entirely if all chunks already exist in the DB
+    const existingChunks = (db.prepare(
+      'SELECT COUNT(*) AS n FROM chunks WHERE issue_id = ?'
+    ).get(issueId) as { n: number }).n;
+    if (existingChunks >= rawChunks.length) {
+      log(`  → already indexed, skipping.`);
+      totalChunks += rawChunks.length;
+      continue;
+    }
+
     // Embed in batches
     const texts = rawChunks.map((c) => c.text);
     const embeddings: Float32Array[] = [];

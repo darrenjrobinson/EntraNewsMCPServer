@@ -54,13 +54,17 @@ jobs:
           echo "Checking for existing database release..."
 
           # Get the latest release's DB asset URL (if any)
-          ASSET_URL=$(gh release view latest \
+          echo "Looking for latest release asset..."
+          RELEASE_INFO=$(gh release view latest \
             --repo "${{ github.repository }}" \
-            --json assets \
-            --jq '.assets[] | select(.name == "entra-news.db") | .url' \
-            2>/dev/null || true)
+            --json tagName,assets \
+            2>/dev/null || echo '{}')
+          echo "Release info: $RELEASE_INFO"
 
-          if [ -n "$ASSET_URL" ]; then
+          ASSET_NAME=$(echo "$RELEASE_INFO" | jq -r '.assets[] | select(.name == "entra-news.db") | .name' 2>/dev/null || true)
+          echo "Asset found: '$ASSET_NAME'"
+
+          if [ "$ASSET_NAME" = "entra-news.db" ]; then
             echo "Downloading existing database..."
             gh release download latest \
               --repo "${{ github.repository }}" \
@@ -69,7 +73,7 @@ jobs:
             echo "db_existed=true" >> "$GITHUB_OUTPUT"
             ls -lh entra-news.db
           else
-            echo "No existing database found — running full ingest."
+            echo "No existing entra-news.db asset found in latest release — running full ingest."
             echo "db_existed=false" >> "$GITHUB_OUTPUT"
           fi
 
