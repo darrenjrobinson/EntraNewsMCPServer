@@ -69,6 +69,29 @@ By default the server uses keyword search (BM25 via FTS5). For significantly bet
 
 ---
 
+## Local Database Cache
+
+On first launch the server downloads the database (~15–20 MB) from GitHub Releases and caches it locally:
+
+| Platform | Cache location |
+|----------|---------------|
+| Windows  | `%USERPROFILE%\.entra-news-mcp\` |
+| macOS / Linux | `~/.entra-news-mcp/` |
+
+The server checks for a newer database release **once per week**. If you want to force an immediate re-download (e.g. after a new issue has been ingested), delete the cache folder and restart your MCP host:
+
+**Windows (PowerShell):**
+```powershell
+Remove-Item "$env:USERPROFILE\.entra-news-mcp" -Recurse -Force
+```
+
+**macOS / Linux:**
+```bash
+rm -rf ~/.entra-news-mcp
+```
+
+---
+
 ## Available MCP Tools
 
 | Tool | Description |
