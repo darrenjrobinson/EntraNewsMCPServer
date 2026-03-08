@@ -500,6 +500,54 @@ function inferIssueNumber(post: SubstackPost, index: number): number | null {
   return null;
 }
 
+/**
+ * After ingestion, assign issue numbers to any issues that have NULL issue_number
+ * by interpolating from the nearest numbered neighbours (ordered by published_at).
+ * e.g. if #138 is on Mar 1 and the next numbered issue is #140 on Mar 15,
+ * the unnumbered issue on Mar 8 gets #139.
+ */
+function backfillIssueNumbers(db: DatabaseSync): void {
+  const all = db.prepare(
+    'SELECT id, issue_number, published_at FROM issues ORDER BY published_at ASC'
+  ).all() as Array<{ id: number; issue_number: number | null; published_at: string }>;
+
+  // Build list of known (index → issue_number) anchors
+  const anchors: Array<{ idx: number; num: number }> = [];
+  all.forEach((row, idx) => {
+    if (row.issue_number != null) anchors.push({ idx, num: row.issue_number });
+  });
+
+  if (anchors.length === 0) return;
+
+  const update = db.prepare('UPDATE issues SET issue_number = ? WHERE id = ?');
+
+  all.forEach((row, idx) => {
+    if (row.issue_number != null) return; // already numbered
+
+    // Find the closest anchor before and after this index
+    const before = [...anchors].reverse().find((a) => a.idx < idx);
+    const after = anchors.find((a) => a.idx > idx);
+
+    let assigned: number | null = null;
+    if (before && after) {
+      // Interpolate: distribute evenly in the gap
+      const gap = after.num - before.num;
+      const steps = after.idx - before.idx;
+      const offset = idx - before.idx;
+      assigned = before.num + Math.round((gap * offset) / steps);
+    } else if (before) {
+      assigned = before.num + (idx - before.idx);
+    } else if (after) {
+      assigned = after.num - (after.idx - idx);
+    }
+
+    if (assigned != null) {
+      update.run(assigned, row.id);
+      log(`  Backfilled issue_number=${assigned} for id=${row.id}`);
+    }
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
@@ -544,6 +592,7 @@ async function main(): Promise<void> {
 
   if (posts.length === 0) {
     log('Nothing to ingest. Database is up to date.');
+    backfillIssueNumbers(db);
     updateMeta(db);
     return;
   }
@@ -627,6 +676,7 @@ async function main(): Promise<void> {
     await sleep(RATE_LIMIT_DELAY_MS);
   }
 
+  backfillIssueNumbers(db);
   updateMeta(db);
 
   log(`Done. Ingested ${posts.length} posts, ${totalChunks} total chunks.`);
