@@ -53,28 +53,31 @@ jobs:
         run: |
           echo "Checking for existing database release..."
 
-          # Get the latest release's DB asset URL (if any)
-          echo "Looking for latest release asset..."
-          RELEASE_INFO=$(gh release view latest \
+          # Use --latest flag (not the string "latest" which is treated as a tag name)
+          RELEASE_TAG=$(gh release list \
             --repo "${{ github.repository }}" \
-            --json tagName,assets \
-            2>/dev/null || echo '{}')
-          echo "Release info: $RELEASE_INFO"
+            --limit 1 \
+            --json tagName \
+            --jq '.[0].tagName' \
+            2>/dev/null || true)
+          echo "Latest release tag: '$RELEASE_TAG'"
 
-          ASSET_NAME=$(echo "$RELEASE_INFO" | jq -r '.assets[] | select(.name == "entra-news.db") | .name' 2>/dev/null || true)
-          echo "Asset found: '$ASSET_NAME'"
-
-          if [ "$ASSET_NAME" = "entra-news.db" ]; then
-            echo "Downloading existing database..."
-            gh release download latest \
+          if [ -z "$RELEASE_TAG" ]; then
+            echo "No releases found — running full ingest."
+            echo "db_existed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Attempting to download entra-news.db from release '$RELEASE_TAG'..."
+            if gh release download "$RELEASE_TAG" \
               --repo "${{ github.repository }}" \
               --pattern "entra-news.db" \
-              --output entra-news.db
-            echo "db_existed=true" >> "$GITHUB_OUTPUT"
-            ls -lh entra-news.db
-          else
-            echo "No existing entra-news.db asset found in latest release — running full ingest."
-            echo "db_existed=false" >> "$GITHUB_OUTPUT"
+              --output entra-news.db \
+              2>&1; then
+              echo "db_existed=true" >> "$GITHUB_OUTPUT"
+              ls -lh entra-news.db
+            else
+              echo "Asset entra-news.db not found in release '$RELEASE_TAG' — running full ingest."
+              echo "db_existed=false" >> "$GITHUB_OUTPUT"
+            fi
           fi
 
       # -----------------------------------------------------------------------
