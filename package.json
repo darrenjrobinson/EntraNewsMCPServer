@@ -1,6 +1,6 @@
 {
   "name": "entra-news-mcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "MCP server for searching the Entra.news newsletter archive — a curated weekly digest of Microsoft Entra news",
   "main": "dist/src/index.js",
   "bin": {
