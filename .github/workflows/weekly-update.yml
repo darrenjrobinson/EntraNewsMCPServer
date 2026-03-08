@@ -1,0 +1,177 @@
+name: Weekly Database Update
+
+on:
+  schedule:
+    # Sundays at 09:00 UTC — 8pm AEDT (UTC+11) / 7pm AEST (UTC+10)
+    # Entra.news publishes on Sundays Australian Eastern time
+    - cron: '0 9 * * 0'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Ingestion mode'
+        required: false
+        default: 'incremental'
+        type: choice
+        options:
+          - incremental
+          - full
+
+permissions:
+  contents: write  # needed to create GitHub Releases
+
+jobs:
+  update-database:
+    name: Ingest & Publish Updated Database
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      # -----------------------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # -----------------------------------------------------------------------
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # -----------------------------------------------------------------------
+      - name: Install dependencies
+        run: npm ci
+
+      # -----------------------------------------------------------------------
+      - name: Build TypeScript
+        run: npm run build
+
+      # -----------------------------------------------------------------------
+      - name: Download latest database from GitHub Releases
+        id: download_db
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "Checking for existing database release..."
+
+          # Get the latest release's DB asset URL (if any)
+          ASSET_URL=$(gh release view latest \
+            --repo "${{ github.repository }}" \
+            --json assets \
+            --jq '.assets[] | select(.name == "entra-news.db") | .url' \
+            2>/dev/null || true)
+
+          if [ -n "$ASSET_URL" ]; then
+            echo "Downloading existing database..."
+            gh release download latest \
+              --repo "${{ github.repository }}" \
+              --pattern "entra-news.db" \
+              --output entra-news.db
+            echo "db_existed=true" >> "$GITHUB_OUTPUT"
+            ls -lh entra-news.db
+          else
+            echo "No existing database found — running full ingest."
+            echo "db_existed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # -----------------------------------------------------------------------
+      - name: Determine ingestion mode
+        id: mode
+        run: |
+          INPUT_MODE="${{ github.event.inputs.mode || 'incremental' }}"
+          DB_EXISTED="${{ steps.download_db.outputs.db_existed }}"
+
+          if [ "$DB_EXISTED" = "false" ] || [ "$INPUT_MODE" = "full" ]; then
+            echo "mode=full" >> "$GITHUB_OUTPUT"
+            echo "Mode: full ingest"
+          else
+            echo "mode=incremental" >> "$GITHUB_OUTPUT"
+            echo "Mode: incremental ingest"
+          fi
+
+      # -----------------------------------------------------------------------
+      - name: Run ingestion pipeline
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          INGEST_DB_PATH: ./entra-news.db
+        run: |
+          MODE="${{ steps.mode.outputs.mode }}"
+          if [ "$MODE" = "incremental" ]; then
+            node dist/scripts/ingest.js --incremental
+          else
+            node dist/scripts/ingest.js
+          fi
+
+      # -----------------------------------------------------------------------
+      - name: Verify database
+        run: |
+          if [ ! -f ./entra-news.db ]; then
+            echo "ERROR: Database file not found after ingestion!"
+            exit 1
+          fi
+          ls -lh ./entra-news.db
+
+          # Basic sanity check using sqlite3
+          ISSUE_COUNT=$(sqlite3 ./entra-news.db "SELECT value FROM meta WHERE key='issue_count';" 2>/dev/null || echo "0")
+          CHUNK_COUNT=$(sqlite3 ./entra-news.db "SELECT COUNT(*) FROM chunks;" 2>/dev/null || echo "0")
+          echo "Issues: $ISSUE_COUNT"
+          echo "Chunks: $CHUNK_COUNT"
+          echo "issue_count=$ISSUE_COUNT" >> "$GITHUB_ENV"
+          echo "chunk_count=$CHUNK_COUNT" >> "$GITHUB_ENV"
+
+      # -----------------------------------------------------------------------
+      - name: Determine release tag
+        id: tag
+        run: |
+          DATE=$(date -u +%Y.%m.%d)
+          RUN=$(echo "${{ github.run_number }}" | xargs printf "%04d")
+          TAG="db-${DATE}-${RUN}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "Release tag: ${TAG}"
+
+      # -----------------------------------------------------------------------
+      - name: Create GitHub Release with updated database
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+          NOTES=$(cat <<EOF
+          ## Entra.news Database Update
+
+          **Date:** $(date -u '+%Y-%m-%d %H:%M UTC')
+          **Mode:** ${{ steps.mode.outputs.mode }}
+          **Issues indexed:** ${{ env.issue_count }}
+          **Chunks:** ${{ env.chunk_count }}
+
+          ### Usage
+
+          This database is automatically downloaded by the \`entra-news-mcp\` NPX package on first run.
+          No manual steps required.
+
+          To use manually:
+          \`\`\`bash
+          npx entra-news-mcp
+          \`\`\`
+          EOF
+          )
+
+          gh release create "$TAG" \
+            --repo "${{ github.repository }}" \
+            --title "Database Update $TAG" \
+            --notes "$NOTES" \
+            --latest \
+            ./entra-news.db
+
+          echo "Released: $TAG"
+
+      # -----------------------------------------------------------------------
+      - name: Summary
+        run: |
+          echo "### Database Update Complete" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Metric | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|--------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Tag | ${{ steps.tag.outputs.tag }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Mode | ${{ steps.mode.outputs.mode }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Issues indexed | ${{ env.issue_count }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Chunks | ${{ env.chunk_count }} |" >> "$GITHUB_STEP_SUMMARY"
+          ls -lh entra-news.db | awk '{print "| DB size | " $5 " |"}' >> "$GITHUB_STEP_SUMMARY"
