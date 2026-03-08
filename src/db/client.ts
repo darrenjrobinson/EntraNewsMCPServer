@@ -198,7 +198,7 @@ function isCheckStale(meta: ReleaseMeta): boolean {
   const now = new Date();
   const diffMs = now.getTime() - checked.getTime();
   const diffDays = diffMs / (1000 * 60 * 60 * 24);
-  return diffDays >= 7;
+  return diffDays >= 1;
 }
 
 export async function initDb(): Promise<void> {
