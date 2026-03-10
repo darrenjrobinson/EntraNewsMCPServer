@@ -176,7 +176,7 @@ The output database (`entra-news.db`) should then be uploaded as a GitHub Releas
 
 ## Automated Weekly Updates
 
-A GitHub Actions workflow (`.github/workflows/weekly-update.yml`) runs every Friday at 14:00 UTC:
+A GitHub Actions workflow (`.github/workflows/weekly-update.yml`) runs every Sunday at 14:00 UTC:
 
 1. Downloads the current database from GitHub Releases
 2. Runs the incremental ingestion pipeline
