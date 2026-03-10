@@ -1,6 +1,7 @@
 {
   "name": "entra-news-mcp",
-  "version": "0.1.2",
+  "version": "0.1.3",
+  "mcpName": "io.github.darrenjrobinson/entra-news",
   "description": "MCP server for searching the Entra.news newsletter archive — a curated weekly digest of Microsoft Entra news",
   "main": "dist/src/index.js",
   "bin": {
