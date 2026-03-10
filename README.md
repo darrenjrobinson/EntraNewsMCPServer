@@ -139,7 +139,7 @@ GitHub Release asset  ──→  NPX MCP Server
 
 ### Prerequisites
 
-- Node.js 18+
+- Node.js 22+
 - An OpenAI API key (`text-embedding-3-small` access)
 
 ### Full ingest (first time)
