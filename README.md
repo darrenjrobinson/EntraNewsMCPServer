@@ -3,6 +3,7 @@
 > A searchable knowledge MCP over [Entra.news](https://entra.news) — Merill Fernando's curated weekly digest of Microsoft Entra news, features, and community tools.
 
 [![npm](https://img.shields.io/npm/v/entra-news-mcp)](https://www.npmjs.com/package/entra-news-mcp)
+[![npm downloads](https://img.shields.io/npm/dm/entra-news-mcp)](https://www.npmjs.com/package/entra-news-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---

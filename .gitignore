@@ -7,3 +7,5 @@ dist/
 *.tmp
 .DS_Store
 EntraNewsMCPPRD.MD
+.mcpregistry_github_token
+.mcpregistry_registry_token
