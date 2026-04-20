@@ -2,9 +2,10 @@ name: Weekly Database Update
 
 on:
   schedule:
-    # Sundays at 11:00 UTC — 10pm AEDT (UTC+11) / 9pm AEST (UTC+10)
+    # OLD Sundays at 11:00 UTC — 10pm AEDT (UTC+11) / 9pm AEST (UTC+10)
+    # Mondays at 23:00 UTC — 10am AEDT (UTC+11) / 9pm AEST (UTC+10)
     # Entra.news publishes on Sundays Australian Eastern time
-    - cron: '0 11 * * 0'
+    - cron: '0 23 * * 0'
   workflow_dispatch:
     inputs:
       mode:
