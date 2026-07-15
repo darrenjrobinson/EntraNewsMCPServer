@@ -202,6 +202,22 @@ A GitHub Actions workflow (`.github/workflows/weekly-update.yml`) runs every Mon
 
 ---
 
+## Releasing (npm + MCP Registry)
+
+Publishing is automated by `.github/workflows/publish-mcp.yml`, triggered by pushing a `v*` tag. Authentication is tokenless (OIDC) for both npm ([Trusted Publishing](https://docs.npmjs.com/trusted-publishers)) and the [MCP Registry](https://modelcontextprotocol.io/registry/github-actions).
+
+1. Bump the version in `package.json` **and** `server.json` (both `version` fields) — the workflow fails if they don't match the tag
+2. Commit, then tag and push:
+
+```bash
+git tag v0.1.4
+git push origin main v0.1.4
+```
+
+The workflow builds, publishes to npm (with provenance), and publishes the new version to the MCP Registry.
+
+---
+
 ## Development
 
 ```bash

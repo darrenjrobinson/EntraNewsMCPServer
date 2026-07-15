@@ -1,0 +1,84 @@
+name: Publish to npm & MCP Registry
+
+# Triggered by pushing a version tag (e.g. v0.1.4).
+# Weekly database releases use db-* tags and do NOT trigger this workflow.
+#
+# Auth is tokenless (OIDC) for both targets:
+#  - npm: Trusted Publishing — one-time setup at npmjs.com → package Settings →
+#    Trusted Publisher → GitHub Actions (owner: darrenjrobinson,
+#    repo: EntraNewsMCPServer, workflow: publish-mcp.yml). Provenance is
+#    generated automatically.
+#  - MCP Registry: GitHub OIDC authorises the io.github.darrenjrobinson/*
+#    namespace because this workflow runs in that owner's repo.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  id-token: write # OIDC for npm trusted publishing + MCP Registry
+  contents: read
+
+jobs:
+  publish:
+    name: Publish npm package & registry entry
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          registry-url: "https://registry.npmjs.org"
+
+      # npm Trusted Publishing requires npm >= 11.5.1 (Node 22 bundles npm 10)
+      - name: Update npm for trusted publishing
+        run: npm install -g npm@latest && npm --version
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Verify tag matches package.json and server.json versions
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG=$(node -p "require('./package.json').version")
+          SRV=$(node -p "require('./server.json').version")
+          SRV_PKG=$(node -p "require('./server.json').packages[0].version")
+          echo "tag=$TAG package.json=$PKG server.json=$SRV server.json.packages[0]=$SRV_PKG"
+          if [ "$TAG" != "$PKG" ] || [ "$TAG" != "$SRV" ] || [ "$TAG" != "$SRV_PKG" ]; then
+            echo "::error::Version mismatch — bump package.json and server.json (both version fields) to $TAG before tagging."
+            exit 1
+          fi
+
+      - name: Publish to npm
+        run: npm publish
+
+      - name: Install mcp-publisher
+        run: |
+          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+
+      - name: Authenticate to MCP Registry (GitHub OIDC)
+        run: ./mcp-publisher login github-oidc
+
+      - name: Publish to MCP Registry
+        run: ./mcp-publisher publish
+
+      - name: Summary
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          {
+            echo "### Published v${TAG}"
+            echo ""
+            echo "| Target | Location |"
+            echo "|--------|----------|"
+            echo "| npm | https://www.npmjs.com/package/entra-news-mcp/v/${TAG} |"
+            echo "| MCP Registry | io.github.darrenjrobinson/entra-news |"
+          } >> "$GITHUB_STEP_SUMMARY"
