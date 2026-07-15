@@ -116,6 +116,19 @@ const TOOLS: Tool[] = [
   },
 ];
 
+// Resolve the package version from package.json so it is defined in one place.
+// Compiled layout: dist/src/server.js → ../../package.json; ts-node dev: src/server.ts → ../package.json
+function getPackageVersion(): string {
+  for (const p of ['../package.json', '../../package.json']) {
+    try {
+      return require(p).version;
+    } catch {
+      // try next path
+    }
+  }
+  return '0.0.0';
+}
+
 export async function createServer(): Promise<{ server: Server; transport: StdioServerTransport }> {
   // Initialise the database (download if needed)
   await initDb();
@@ -123,7 +136,7 @@ export async function createServer(): Promise<{ server: Server; transport: Stdio
   const server = new Server(
     {
       name: 'entra-news-mcp',
-      version: '0.1.0',
+      version: getPackageVersion(),
     },
     {
       capabilities: {

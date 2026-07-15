@@ -50,9 +50,24 @@ Restart Claude Desktop. The database (~15–20 MB) will be downloaded on first l
 }
 ```
 
+### VS Code
+
+Add to your MCP config (workspace `.vscode/mcp.json`, or run **MCP: Add Server** from the Command Palette):
+
+```json
+{
+  "servers": {
+    "entra-news-mcp": {
+      "command": "npx",
+      "args": ["-y", "entra-news-mcp"]
+    }
+  }
+}
+```
+
 ### Semantic Search (Optional)
 
-By default the server uses keyword search (BM25 via FTS5). For significantly better result quality, set your OpenAI API key:
+By default the server uses keyword and phrase matching over the SQLite index — no API key needed. For significantly better result quality, set your OpenAI API key to enable semantic + hybrid search:
 
 ```json
 {
@@ -121,13 +136,13 @@ Substack API (entra.news/api/v1/posts)
 Node.js ingestion script  ←  OpenAI text-embedding-3-small
     │
     ▼
-SQLite + sqlite-vec (~15–20 MB)
+SQLite (chunks + embeddings, ~15–20 MB)
     │
     ▼
 GitHub Release asset  ──→  NPX MCP Server
                                └─ Downloads DB on first run
                                └─ Checks for updates weekly
-                               └─ Local vector + FTS search
+                               └─ In-memory vector similarity + keyword search
 ```
 
 **Cost:** ~$0.01/week (embeddings on new issues only). Zero hosting.
@@ -177,7 +192,7 @@ The output database (`entra-news.db`) should then be uploaded as a GitHub Releas
 
 ## Automated Weekly Updates
 
-A GitHub Actions workflow (`.github/workflows/weekly-update.yml`) runs every Sunday at 14:00 UTC:
+A GitHub Actions workflow (`.github/workflows/weekly-update.yml`) runs every Monday at 9am Sydney time (Sunday 23:00 UTC), shortly after each new Entra.news issue is published:
 
 1. Downloads the current database from GitHub Releases
 2. Runs the incremental ingestion pipeline
@@ -202,7 +217,7 @@ src/
   index.ts             # Entry point
   server.ts            # MCP server + tool registration
   db/
-    client.ts          # SQLite + sqlite-vec client, DB download/cache
+    client.ts          # SQLite client — DB download/cache + search
   tools/
     search.ts          # search_entra_news tool
     get-issue.ts       # get_issue tool
