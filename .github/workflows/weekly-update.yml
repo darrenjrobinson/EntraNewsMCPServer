@@ -105,6 +105,9 @@ jobs:
           if [ "$MODE" = "incremental" ]; then
             node dist/scripts/ingest.js --incremental
           else
+            # Full mode must rebuild from scratch — the ingest skips re-embedding
+            # issues whose chunks already exist, so a downloaded DB would survive.
+            rm -f ./entra-news.db
             node dist/scripts/ingest.js
           fi
 
