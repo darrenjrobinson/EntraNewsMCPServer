@@ -1,6 +1,6 @@
 {
   "name": "entra-news-mcp",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "mcpName": "io.github.darrenjrobinson/entra-news",
   "description": "MCP server for searching the Entra.news newsletter archive — a curated weekly digest of Microsoft Entra news",
   "main": "dist/src/index.js",
@@ -32,8 +32,8 @@
     "url": "https://github.com/darrenjrobinson/EntraNewsMCPServer"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.10.1",
-    "zod": "^3.22.4"
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
