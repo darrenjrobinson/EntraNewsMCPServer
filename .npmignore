@@ -18,3 +18,4 @@ dist/**/*.map
 *.tmp
 .DS_Store
 EntraNewsMCPPRD.MD
+MCP-SDK-SECURITY-RUNBOOK.md
