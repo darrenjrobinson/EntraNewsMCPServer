@@ -119,7 +119,17 @@ async function fetchPage(
   const data = JSON.parse(raw) as
     | SubstackPost[]
     | { posts?: SubstackPost[]; nextCursor?: string | null; errors?: unknown };
-  if (Array.isArray(data)) return { posts: data, nextCursor: null };
+  if (Array.isArray(data)) {
+    // Legacy bare-array shape carries no cursor. A short page is the whole
+    // archive; a full page means more exist that we cannot reach, so refuse
+    // rather than publish a truncated DB.
+    if (data.length >= PAGE_SIZE) {
+      throw new Error(
+        `Substack API returned a full page (${data.length}) as a bare array with no cursor — cannot paginate.`
+      );
+    }
+    return { posts: data, nextCursor: null };
+  }
   if (!Array.isArray(data.posts)) {
     throw new Error(`Unexpected Substack API response: ${raw.slice(0, 300)}`);
   }
@@ -135,6 +145,7 @@ async function fetchPost(slug: string): Promise<SubstackPost> {
 async function fetchAllPosts(): Promise<SubstackPost[]> {
   const all: SubstackPost[] = [];
   const seen = new Set<number>();
+  const seenCursors = new Set<string>();
   let cursor: string | null = null;
   while (true) {
     const page = await fetchPage(cursor);
@@ -144,7 +155,11 @@ async function fetchAllPosts(): Promise<SubstackPost[]> {
         all.push(p);
       }
     }
-    if (page.posts.length === 0 || !page.nextCursor || page.nextCursor === cursor) break;
+    if (page.posts.length === 0 || !page.nextCursor) break;
+    if (seenCursors.has(page.nextCursor)) {
+      throw new Error('Substack API returned a repeated pagination cursor — archive walk is incomplete.');
+    }
+    seenCursors.add(page.nextCursor);
     cursor = page.nextCursor;
     await sleep(RATE_LIMIT_DELAY_MS);
   }
