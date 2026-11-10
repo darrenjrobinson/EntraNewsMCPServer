@@ -86,7 +86,13 @@ function get(url: string, headers: Record<string, string> = {}): Promise<string>
       }
       let data = '';
       res.on('data', (c) => (data += c));
-      res.on('end', () => resolve(data));
+      res.on('end', () => {
+        if (res.statusCode && res.statusCode >= 400) {
+          reject(new Error(`HTTP ${res.statusCode} from ${url}: ${data.slice(0, 300)}`));
+          return;
+        }
+        resolve(data);
+      });
       res.on('error', reject);
     }).on('error', reject);
   });
@@ -99,12 +105,25 @@ function sleep(ms: number): Promise<void> {
 // ---------------------------------------------------------------------------
 // Substack API
 // ---------------------------------------------------------------------------
-async function fetchPage(offset: number): Promise<SubstackPost[]> {
-  const url = `${SUBSTACK_BASE}?limit=${PAGE_SIZE}&offset=${offset}`;
-  log(`Fetching page offset=${offset}…`);
+/**
+ * Fetch one page of posts. Substack's API uses cursor pagination
+ * (`{ posts, nextCursor }`); the legacy `offset` parameter is rejected with 400.
+ */
+async function fetchPage(
+  cursor: string | null
+): Promise<{ posts: SubstackPost[]; nextCursor: string | null }> {
+  let url = `${SUBSTACK_BASE}?limit=${PAGE_SIZE}`;
+  if (cursor) url += `&cursor=${encodeURIComponent(cursor)}`;
+  log(`Fetching page${cursor ? ' (cursor)' : ''}…`);
   const raw = await get(url);
-  const data = JSON.parse(raw) as SubstackPost[] | { posts: SubstackPost[] };
-  return Array.isArray(data) ? data : (data as { posts: SubstackPost[] }).posts ?? [];
+  const data = JSON.parse(raw) as
+    | SubstackPost[]
+    | { posts?: SubstackPost[]; nextCursor?: string | null; errors?: unknown };
+  if (Array.isArray(data)) return { posts: data, nextCursor: null };
+  if (!Array.isArray(data.posts)) {
+    throw new Error(`Unexpected Substack API response: ${raw.slice(0, 300)}`);
+  }
+  return { posts: data.posts, nextCursor: data.nextCursor ?? null };
 }
 
 async function fetchPost(slug: string): Promise<SubstackPost> {
@@ -115,14 +134,22 @@ async function fetchPost(slug: string): Promise<SubstackPost> {
 
 async function fetchAllPosts(): Promise<SubstackPost[]> {
   const all: SubstackPost[] = [];
-  let offset = 0;
+  const seen = new Set<number>();
+  let cursor: string | null = null;
   while (true) {
-    const page = await fetchPage(offset);
-    if (page.length === 0) break;
-    all.push(...page);
-    if (page.length < PAGE_SIZE) break;
-    offset += PAGE_SIZE;
+    const page = await fetchPage(cursor);
+    for (const p of page.posts) {
+      if (!seen.has(p.id)) {
+        seen.add(p.id);
+        all.push(p);
+      }
+    }
+    if (page.posts.length === 0 || !page.nextCursor || page.nextCursor === cursor) break;
+    cursor = page.nextCursor;
     await sleep(RATE_LIMIT_DELAY_MS);
+  }
+  if (all.length === 0) {
+    throw new Error('Substack API returned zero posts — refusing to treat this as "up to date".');
   }
   return all;
 }
