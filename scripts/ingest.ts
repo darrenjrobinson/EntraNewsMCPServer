@@ -198,12 +198,19 @@ function stripHtml(html: string): string {
     .trim();
 }
 
+/**
+ * Split post HTML into sections keyed by their full heading path, e.g.
+ * "⚡️ Microsoft › 🏆 General Availability". Nesting follows h1–h4 levels so a
+ * section keeps the context of its parent headings.
+ */
 function extractSections(html: string): Array<{ heading: string | null; text: string }> {
   const sections: Array<{ heading: string | null; text: string }> = [];
-  const headingRe = /<h[1-4][^>]*>(.*?)<\/h[1-4]>/gi;
+  const headingRe = /<h([1-4])[^>]*>([\s\S]*?)<\/h\1>/gi;
 
   let lastEnd = 0;
   let currentHeading: string | null = null;
+  // headingStack[level - 1] = heading text at that level
+  const headingStack: string[] = [];
   let match: RegExpExecArray | null;
 
   while ((match = headingRe.exec(html)) !== null) {
@@ -211,7 +218,12 @@ function extractSections(html: string): Array<{ heading: string | null; text: st
     if (textBefore) {
       sections.push({ heading: currentHeading, text: textBefore });
     }
-    currentHeading = stripHtml(match[1]).trim();
+    const level = parseInt(match[1], 10);
+    const title = stripHtml(match[2]).replace(/\s+/g, ' ').trim();
+    headingStack.length = level - 1; // drop same-or-deeper levels
+    headingStack[level - 1] = title;
+    const path = headingStack.filter(Boolean).join(' › ');
+    currentHeading = path || null;
     lastEnd = match.index + match[0].length;
   }
 
@@ -253,7 +265,10 @@ function buildChunks(
   const chunks: Array<{ section_heading: string | null; text: string }> = [];
 
   for (const section of sections) {
-    if (wordCount(section.text) < 20) continue; // skip stub sections
+    // Keep every non-empty section: most newsletter sections are a single
+    // "link title • author" line (~10 words), so a word-count floor drops
+    // real content such as General Availability / Public Preview items.
+    if (wordCount(section.text) === 0) continue;
     const subchunks = chunkText(section.text);
     for (const chunk of subchunks) {
       chunks.push({ section_heading: section.heading, text: chunk });
@@ -686,7 +701,12 @@ async function main(): Promise<void> {
     }
 
     // Embed in batches
-    const texts = rawChunks.map((c) => c.text);
+    // Embed heading path + text so short sections (e.g. a single GA link) are
+    // retrievable by their section topic. Stored text stays clean; the server
+    // renders section_heading separately.
+    const texts = rawChunks.map((c) =>
+      c.section_heading ? `${c.section_heading}\n\n${c.text}` : c.text
+    );
     const embeddings: Float32Array[] = [];
 
     for (let b = 0; b < texts.length; b += EMBEDDING_BATCH) {
