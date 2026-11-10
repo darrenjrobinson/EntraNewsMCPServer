@@ -29,6 +29,7 @@ import * as path from 'path';
 // ---------------------------------------------------------------------------
 const SUBSTACK_BASE = 'https://entra.news/api/v1/posts';
 const PAGE_SIZE = 50;
+const MAX_PAGES = 1000; // safety cap on cursor traversal
 const CHUNK_TARGET_WORDS = 400;
 const CHUNK_OVERLAP_WORDS = 50;
 const OPENAI_MODEL = 'text-embedding-3-small';
@@ -147,7 +148,10 @@ async function fetchAllPosts(): Promise<SubstackPost[]> {
   const seen = new Set<number>();
   const seenCursors = new Set<string>();
   let cursor: string | null = null;
-  while (true) {
+  for (let pageNum = 1; ; pageNum++) {
+    if (pageNum > MAX_PAGES) {
+      throw new Error(`Exceeded ${MAX_PAGES} pages while walking the Substack archive — aborting.`);
+    }
     const page = await fetchPage(cursor);
     for (const p of page.posts) {
       if (!seen.has(p.id)) {
@@ -155,7 +159,9 @@ async function fetchAllPosts(): Promise<SubstackPost[]> {
         all.push(p);
       }
     }
-    if (page.posts.length === 0 || !page.nextCursor) break;
+    // Only the absence of a cursor ends the walk; an empty page that still
+    // advertises a cursor is followed (and its cursor cycle-checked).
+    if (!page.nextCursor) break;
     if (seenCursors.has(page.nextCursor)) {
       throw new Error('Substack API returned a repeated pagination cursor — archive walk is incomplete.');
     }
