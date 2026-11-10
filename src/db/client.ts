@@ -106,6 +106,7 @@ function fetchJson(url: string): Promise<unknown> {
           return;
         }
       }
+      res.setEncoding('utf8'); // decode multi-byte chars split across chunks
       let data = '';
       res.on('data', (chunk) => (data += chunk));
       res.on('end', () => {

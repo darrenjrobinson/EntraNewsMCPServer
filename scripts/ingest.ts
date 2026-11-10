@@ -85,6 +85,7 @@ function get(url: string, headers: Record<string, string> = {}): Promise<string>
         resolve(get(res.headers.location, headers));
         return;
       }
+      res.setEncoding('utf8'); // decode multi-byte chars split across chunks
       let data = '';
       res.on('data', (c) => (data += c));
       res.on('end', () => {
@@ -391,6 +392,7 @@ async function embedBatch(
         },
       },
       (res) => {
+        res.setEncoding('utf8'); // decode multi-byte chars split across chunks
         let data = '';
         res.on('data', (c) => (data += c));
         res.on('end', () => resolve(data));
