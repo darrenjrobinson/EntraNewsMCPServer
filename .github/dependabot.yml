@@ -5,7 +5,15 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    ignore:
+      # TypeScript 7 (native compiler) is incompatible with ts-node; upgrade deliberately.
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
     groups:
+      # MCP SDK v2 packages share one version and server pins core exactly,
+      # so always bump them together. Must precede dependency-type groups.
+      mcp-sdk:
+        patterns: ["@modelcontextprotocol/*"]
       dev-dependencies:
         dependency-type: development
 
