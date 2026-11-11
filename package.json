@@ -32,7 +32,7 @@
     "url": "https://github.com/darrenjrobinson/EntraNewsMCPServer"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@modelcontextprotocol/server": "^2.4.0",
     "zod": "^4.6.7"
   },
   "devDependencies": {
