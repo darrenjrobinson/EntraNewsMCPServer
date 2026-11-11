@@ -64,7 +64,7 @@ jobs:
         run: |
           VERSION=$(node -p "require('./package.json').version")
           NAME=$(node -p "require('./package.json').name")
-          if [ "$(npm view "$NAME@$VERSION" version 2>/dev/null)" = "$VERSION" ]; then
+          if curl -sf -o /dev/null "https://registry.npmjs.org/$NAME/$VERSION"; then
             echo "$NAME@$VERSION is already on npm — skipping publish."
           else
             npm publish
@@ -72,12 +72,14 @@ jobs:
 
       # The MCP Registry validates the npm package exists, but a fresh npm
       # publish can take a minute to become visible (v0.2.0 failed on this).
+      # Poll the version-specific endpoint the registry checks, not the
+      # package document `npm view` reads — they are cached separately.
       - name: Wait for npm to serve the new version
         run: |
           VERSION=$(node -p "require('./package.json').version")
           NAME=$(node -p "require('./package.json').name")
           for i in $(seq 1 30); do
-            if [ "$(npm view "$NAME@$VERSION" version 2>/dev/null)" = "$VERSION" ]; then
+            if curl -sf -o /dev/null "https://registry.npmjs.org/$NAME/$VERSION"; then
               echo "$NAME@$VERSION visible on npm after ~$(( (i-1)*10 ))s"
               exit 0
             fi
@@ -93,8 +95,24 @@ jobs:
       - name: Authenticate to MCP Registry (GitHub OIDC)
         run: ./mcp-publisher login github-oidc
 
+      # Belt and braces: the registry may still see a stale npm 404 via a
+      # different cache edge. Retry only on that propagation error.
       - name: Publish to MCP Registry
-        run: ./mcp-publisher publish
+        run: |
+          for i in 1 2 3 4 5; do
+            if ./mcp-publisher publish > publish.log 2>&1; then
+              cat publish.log
+              exit 0
+            fi
+            cat publish.log
+            if ! grep -q "was not found" publish.log; then
+              exit 1
+            fi
+            echo "npm version not yet visible to the MCP Registry (attempt $i/5) — retrying in 30s"
+            sleep 30
+          done
+          echo "::error::MCP Registry still could not see the npm version after 5 attempts"
+          exit 1
 
       - name: Summary
         run: |
