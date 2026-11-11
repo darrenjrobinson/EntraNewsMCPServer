@@ -58,8 +58,33 @@ jobs:
             exit 1
           fi
 
+      # Skip when this version is already on npm, so a re-run after a failed
+      # registry step does not die on "cannot publish over existing version".
       - name: Publish to npm
-        run: npm publish
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          NAME=$(node -p "require('./package.json').name")
+          if [ "$(npm view "$NAME@$VERSION" version 2>/dev/null)" = "$VERSION" ]; then
+            echo "$NAME@$VERSION is already on npm — skipping publish."
+          else
+            npm publish
+          fi
+
+      # The MCP Registry validates the npm package exists, but a fresh npm
+      # publish can take a minute to become visible (v0.2.0 failed on this).
+      - name: Wait for npm to serve the new version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          NAME=$(node -p "require('./package.json').name")
+          for i in $(seq 1 30); do
+            if [ "$(npm view "$NAME@$VERSION" version 2>/dev/null)" = "$VERSION" ]; then
+              echo "$NAME@$VERSION visible on npm after ~$(( (i-1)*10 ))s"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::$NAME@$VERSION not visible on npm after 5 minutes"
+          exit 1
 
       - name: Install mcp-publisher
         run: |
